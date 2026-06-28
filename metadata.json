@@ -1,0 +1,6 @@
+{
+  "name": "Nara Configuration Studio",
+  "description": "Design, evolutionize, and synchronize the core cognitive architecture of your autonomous AI companion.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

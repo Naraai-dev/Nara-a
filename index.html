@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <script>
+      // Safeguard against: TypeError: Cannot set property fetch of #<Window> which has only a getter
+      (function() {
+        try {
+          var _fetch = window.fetch;
+          Object.defineProperty(window, 'fetch', {
+            get: function() {
+              return _fetch;
+            },
+            set: function(val) {
+              _fetch = val;
+            },
+            configurable: true,
+            enumerable: true
+          });
+        } catch (e) {
+          try {
+            var _fetchProto = Window.prototype.fetch || window.fetch;
+            Object.defineProperty(Window.prototype, 'fetch', {
+              get: function() {
+                return _fetchProto;
+              },
+              set: function(val) {
+                _fetchProto = val;
+              },
+              configurable: true,
+              enumerable: true
+            });
+          } catch (e2) {
+            console.warn('Could not define fetch getter/setter:', e2);
+          }
+        }
+      })();
+    </script>
+    <link rel="icon" type="image/svg+xml" href="https://studio-nara.net/favicon.ico" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Nara — Configuration Studio</title>
+  </head>
+  <body class="bg-[#FAF9F5] text-[#1C1C1C] selection:bg-[#5A5A40]/20 selection:text-[#1C1C1C]">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
