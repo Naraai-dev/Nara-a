@@ -3,7 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
-import nodemailer from 'nodemailer';
+import nodemailer, { type Transporter } from 'nodemailer';
 import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
 
@@ -43,26 +43,58 @@ function getSupabase() {
 }
 
 // Lazy-loaded Nodemailer SMTP Transporter
-let mailTransporter: any = null;
-function getMailTransporter() {
-  if (!mailTransporter) {
-    const host = process.env.SMTP_HOST || 'smtp.gmail.com';
-    const port = parseInt(process.env.SMTP_PORT || '587', 10);
-    const user = process.env.SMTP_USER || 'naraartficalintel@gmail.com';
-    const pass = process.env.SMTP_PASS || '';
+let mailTransporter: Transporter | null = null;
+let mailTransporterInit: Promise<Transporter> | null = null;
 
-    // Create transporter (even with empty pass to allow fallback logging instead of crash)
-    mailTransporter = nodemailer.createTransport({
-      host,
-      port,
-      secure: port === 465,
-      auth: {
-        user,
-        pass,
-      },
+function resetMailTransporter() {
+  mailTransporter = null;
+  mailTransporterInit = null;
+}
+
+async function initMailTransporter(): Promise<Transporter> {
+  const host = process.env.SMTP_HOST || 'smtp.gmail.com';
+  const port = parseInt(process.env.SMTP_PORT || '587', 10);
+  const user = process.env.SMTP_USER || 'naraartficalintel@gmail.com';
+  const pass = process.env.SMTP_PASS || '';
+
+  // Create transporter (even with empty pass to allow fallback logging instead of crash)
+  mailTransporter = nodemailer.createTransport({
+    host,
+    port,
+    secure: port === 465,
+    auth: {
+      user,
+      pass,
+    },
+    connectionTimeout: 30000,
+    greetingTimeout: 30000,
+    socketTimeout: 30000,
+    requireTLS: true,
+  });
+
+  try {
+    await mailTransporter.verify();
+    console.log('[SMTP] Transporter verified successfully.');
+  } catch (error) {
+    console.error('[SMTP] Transporter verification failed:', error);
+  }
+
+  return mailTransporter;
+}
+
+async function getMailTransporter(): Promise<Transporter> {
+  if (mailTransporter) {
+    return mailTransporter;
+  }
+
+  if (!mailTransporterInit) {
+    mailTransporterInit = initMailTransporter().catch((error) => {
+      resetMailTransporter();
+      throw error;
     });
   }
-  return mailTransporter;
+
+  return mailTransporterInit;
 }
 
 // Lazy-loaded Gemini API Client (per guidelines)
@@ -162,7 +194,7 @@ app.post('/api/book', async (req, res) => {
     const smtpPass = process.env.SMTP_PASS;
 
     if (smtpPass) {
-      const transporter = getMailTransporter();
+      const mailer = await getMailTransporter();
 
       // Custom conference room / calendar link
       const zoomLink = `https://zoom.us/j/9082341253?pwd=NARA-STUDIO-${bookingId}`;
@@ -238,8 +270,8 @@ app.post('/api/book', async (req, res) => {
       };
 
       // Dispatch both emails in background
-      transporter.sendMail(clientMailOptions).catch((e: any) => console.error('Client Email Error:', e.message));
-      transporter.sendMail(adminMailOptions).catch((e: any) => console.error('Admin Email Error:', e.message));
+      mailer.sendMail(clientMailOptions).catch((error: unknown) => console.error('Client Email Error:', error));
+      mailer.sendMail(adminMailOptions).catch((error: unknown) => console.error('Admin Email Error:', error));
     } else {
       console.warn('SMTP pass is not defined. Email dispatch bypassed; booking completed locally.');
     }
@@ -389,7 +421,7 @@ app.post('/api/settings', async (req, res) => {
     }
 
     supabaseClient = null;
-    mailTransporter = null;
+    resetMailTransporter();
     geminiClient = null;
 
     res.json({ success: true, message: 'Settings saved successfully and runtime engine reloaded.' });
@@ -457,6 +489,10 @@ async function startServer() {
     app.get('*', (_req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
     });
+  }
+
+  if (process.env.SMTP_PASS) {
+    await getMailTransporter();
   }
 
   app.listen(PORT, '0.0.0.0', () => {
