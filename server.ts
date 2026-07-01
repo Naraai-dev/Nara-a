@@ -52,24 +52,18 @@ function resetMailTransporter() {
 }
 
 async function initMailTransporter(): Promise<Transporter> {
-  const host = process.env.SMTP_HOST || 'smtp.gmail.com';
-  const port = parseInt(process.env.SMTP_PORT || '587', 10);
-  const user = process.env.SMTP_USER || 'naraartficalintel@gmail.com';
-  const pass = process.env.SMTP_PASS || '';
-
   // Create transporter (even with empty pass to allow fallback logging instead of crash)
   mailTransporter = nodemailer.createTransport({
-    host,
-    port,
-    secure: port === 465,
+    host: 'smtp.gmail.com',
+    port: 465,
+    secure: true,
     auth: {
-      user,
-      pass,
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASS,
     },
     connectionTimeout: 30000,
     greetingTimeout: 30000,
     socketTimeout: 30000,
-    requireTLS: true,
   });
 
   try {
