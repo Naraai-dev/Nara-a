@@ -3,12 +3,14 @@ import path from 'path';
 import fs from 'fs';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
-import nodemailer, { type Transporter } from 'nodemailer';
+import { Resend } from 'resend';
 import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
 
 // Load environment variables
 dotenv.config();
+
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 const app = express();
 const PORT = 3000;
@@ -40,55 +42,6 @@ function getSupabase() {
     }
   }
   return supabaseClient;
-}
-
-// Lazy-loaded Nodemailer SMTP Transporter
-let mailTransporter: Transporter | null = null;
-let mailTransporterInit: Promise<Transporter> | null = null;
-
-function resetMailTransporter() {
-  mailTransporter = null;
-  mailTransporterInit = null;
-}
-
-async function initMailTransporter(): Promise<Transporter> {
-  // Create transporter (even with empty pass to allow fallback logging instead of crash)
-  mailTransporter = nodemailer.createTransport({
-    host: 'smtp.gmail.com',
-    port: 465,
-    secure: true,
-    auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS,
-    },
-    connectionTimeout: 30000,
-    greetingTimeout: 30000,
-    socketTimeout: 30000,
-  });
-
-  try {
-    await mailTransporter.verify();
-    console.log('[SMTP] Transporter verified successfully.');
-  } catch (error) {
-    console.error('[SMTP] Transporter verification failed:', error);
-  }
-
-  return mailTransporter;
-}
-
-async function getMailTransporter(): Promise<Transporter> {
-  if (mailTransporter) {
-    return mailTransporter;
-  }
-
-  if (!mailTransporterInit) {
-    mailTransporterInit = initMailTransporter().catch((error) => {
-      resetMailTransporter();
-      throw error;
-    });
-  }
-
-  return mailTransporterInit;
 }
 
 // Lazy-loaded Gemini API Client (per guidelines)
@@ -125,7 +78,7 @@ app.get('/api/health', (_req, res) => {
     status: 'ok',
     timestamp: new Date().toISOString(),
     supabaseActive: Boolean(getSupabase()),
-    smtpActive: Boolean(process.env.SMTP_PASS),
+    resendActive: Boolean(process.env.RESEND_API_KEY),
     geminiActive: Boolean(process.env.GEMINI_API_KEY),
   });
 });
@@ -183,22 +136,17 @@ app.post('/api/book', async (req, res) => {
       }
     }
 
-    // C. Email Routing via Nodemailer
-    const adminEmail = process.env.SMTP_USER || 'naraartficalintel@gmail.com';
-    const smtpPass = process.env.SMTP_PASS;
+    // C. Email Routing via Resend
+    const adminEmail = 'naraartficalintel@gmail.com';
+    const resendApiKey = process.env.RESEND_API_KEY;
 
-    if (smtpPass) {
-      const mailer = await getMailTransporter();
+    if (resendApiKey) {
+      const fromAddress = 'Nara <hello@trynara.site>';
 
       // Custom conference room / calendar link
       const zoomLink = `https://zoom.us/j/9082341253?pwd=NARA-STUDIO-${bookingId}`;
 
-      // 1. Send confirmation email to the Client
-      const clientMailOptions = {
-        from: `"Nara Configuration Studio" <${adminEmail}>`,
-        to: email,
-        subject: `Your Briefing Consultation with ${nara_name || 'Nara'} is Confirmed`,
-        html: `
+      const clientEmailHtml = `
           <div style="font-family: sans-serif; color: #1c1c1c; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e3dfd5; border-radius: 8px;">
             <h2 style="font-family: serif; color: #5a5a40;">Scheduling Confirmation</h2>
             <p>Hello ${name},</p>
@@ -224,15 +172,9 @@ app.post('/api/book', async (req, res) => {
             <p>We look forward to optimizing your system's neural configuration.</p>
             <p style="font-size: 11px; color: #75736D; margin-top: 30px;">This email is auto-routed via Nara Secure Booking Relay.</p>
           </div>
-        `,
-      };
+        `;
 
-      // 2. Send notification email to the Admin
-      const adminMailOptions = {
-        from: `"Nara Booking Relay" <${adminEmail}>`,
-        to: adminEmail,
-        subject: `New Scheduled Briefing: ${name} (${session_type})`,
-        html: `
+      const adminEmailHtml = `
           <div style="font-family: sans-serif; color: #1c1c1c; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e3dfd5; border-radius: 8px;">
             <h2 style="font-family: serif; color: #5a5a40;">New Configuration Consultation Scheduled</h2>
             <p>An operator has scheduled a live session on the platform:</p>
@@ -260,14 +202,38 @@ app.post('/api/book', async (req, res) => {
             </table>
             <p>Please update your Google Calendar and prepare the cognitive review report.</p>
           </div>
-        `,
-      };
+        `;
 
       // Dispatch both emails in background
-      mailer.sendMail(clientMailOptions).catch((error: unknown) => console.error('Client Email Error:', error));
-      mailer.sendMail(adminMailOptions).catch((error: unknown) => console.error('Admin Email Error:', error));
+      resend.emails.send({
+        from: fromAddress,
+        to: email,
+        subject: `Your Briefing Consultation with ${nara_name || 'Nara'} is Confirmed`,
+        html: clientEmailHtml,
+      }).then((response) => {
+        console.log('[Resend] Client confirmation email response:', JSON.stringify(response, null, 2));
+        if (response.error) {
+          console.error('[Resend] Client confirmation email error:', JSON.stringify(response.error, null, 2));
+        }
+      }).catch((error: unknown) => {
+        console.error('[Resend] Client confirmation email error:', error);
+      });
+
+      resend.emails.send({
+        from: fromAddress,
+        to: adminEmail,
+        subject: `New Scheduled Briefing: ${name} (${session_type})`,
+        html: adminEmailHtml,
+      }).then((response) => {
+        console.log('[Resend] Admin notification email response:', JSON.stringify(response, null, 2));
+        if (response.error) {
+          console.error('[Resend] Admin notification email error:', JSON.stringify(response.error, null, 2));
+        }
+      }).catch((error: unknown) => {
+        console.error('[Resend] Admin notification email error:', error);
+      });
     } else {
-      console.warn('SMTP pass is not defined. Email dispatch bypassed; booking completed locally.');
+      console.warn('RESEND_API_KEY is not defined. Email dispatch bypassed; booking completed locally.');
     }
 
     res.json({ success: true, booking: bookingData });
@@ -348,10 +314,7 @@ app.get('/api/settings', (_req, res) => {
       SUPABASE_URL: envVars.SUPABASE_URL || process.env.SUPABASE_URL || '',
       SUPABASE_ANON_KEY: envVars.SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '',
       SUPABASE_SERVICE_ROLE_KEY: envVars.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '',
-      SMTP_HOST: envVars.SMTP_HOST || process.env.SMTP_HOST || '',
-      SMTP_PORT: envVars.SMTP_PORT || process.env.SMTP_PORT || '587',
-      SMTP_USER: envVars.SMTP_USER || process.env.SMTP_USER || '',
-      SMTP_PASS: envVars.SMTP_PASS || process.env.SMTP_PASS || '',
+      RESEND_API_KEY: envVars.RESEND_API_KEY || process.env.RESEND_API_KEY || '',
       GEMINI_API_KEY: envVars.GEMINI_API_KEY || process.env.GEMINI_API_KEY || ''
     };
 
@@ -415,7 +378,6 @@ app.post('/api/settings', async (req, res) => {
     }
 
     supabaseClient = null;
-    resetMailTransporter();
     geminiClient = null;
 
     res.json({ success: true, message: 'Settings saved successfully and runtime engine reloaded.' });
@@ -483,10 +445,6 @@ async function startServer() {
     app.get('*', (_req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
     });
-  }
-
-  if (process.env.SMTP_PASS) {
-    await getMailTransporter();
   }
 
   app.listen(PORT, '0.0.0.0', () => {

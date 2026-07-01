@@ -160,10 +160,7 @@ export default function NaraConfigurationStudio() {
   const [settingsUrl, setSettingsUrl] = useState<string>('');
   const [settingsAnonKey, setSettingsAnonKey] = useState<string>('');
   const [settingsServiceKey, setSettingsServiceKey] = useState<string>('');
-  const [settingsSmtpHost, setSettingsSmtpHost] = useState<string>('smtp.gmail.com');
-  const [settingsSmtpPort, setSettingsSmtpPort] = useState<string>('587');
-  const [settingsSmtpUser, setSettingsSmtpUser] = useState<string>('');
-  const [settingsSmtpPass, setSettingsSmtpPass] = useState<string>('');
+  const [settingsResendApiKey, setSettingsResendApiKey] = useState<string>('');
   const [settingsGeminiKey, setSettingsGeminiKey] = useState<string>('');
 
   const [isLoadingSettings, setIsLoadingSettings] = useState<boolean>(false);
@@ -338,10 +335,7 @@ export default function NaraConfigurationStudio() {
         setSettingsUrl(data.SUPABASE_URL || '');
         setSettingsAnonKey(data.SUPABASE_ANON_KEY || '');
         setSettingsServiceKey(data.SUPABASE_SERVICE_ROLE_KEY || '');
-        setSettingsSmtpHost(data.SMTP_HOST || 'smtp.gmail.com');
-        setSettingsSmtpPort(data.SMTP_PORT || '587');
-        setSettingsSmtpUser(data.SMTP_USER || '');
-        setSettingsSmtpPass(data.SMTP_PASS || '');
+        setSettingsResendApiKey(data.RESEND_API_KEY || '');
         setSettingsGeminiKey(data.GEMINI_API_KEY || '');
       } else {
         throw new Error('Failed to retrieve environment variables from server.');
@@ -365,10 +359,7 @@ export default function NaraConfigurationStudio() {
           SUPABASE_URL: settingsUrl,
           SUPABASE_ANON_KEY: settingsAnonKey,
           SUPABASE_SERVICE_ROLE_KEY: settingsServiceKey,
-          SMTP_HOST: settingsSmtpHost,
-          SMTP_PORT: settingsSmtpPort,
-          SMTP_USER: settingsSmtpUser,
-          SMTP_PASS: settingsSmtpPass,
+          RESEND_API_KEY: settingsResendApiKey,
           GEMINI_API_KEY: settingsGeminiKey,
         }),
       });
@@ -2276,7 +2267,7 @@ export default function NaraConfigurationStudio() {
                         <Cpu className="text-[#5A5A40]" size={18} />
                         <div className="text-left">
                           <h4 className="text-sm font-serif font-semibold text-[#1C1C1C]">Stack Environment Variables</h4>
-                          <p className="text-[10px] text-[#75736D] font-sans">Configure database connections, SMTP credentials, and Gemini API keys.</p>
+                          <p className="text-[10px] text-[#75736D] font-sans">Configure database connections, Resend API credentials, and Gemini API keys.</p>
                         </div>
                       </div>
                       <span className="text-[#75736D] transition-transform group-open:rotate-180 font-mono text-xs font-bold">&darr;</span>
@@ -2370,62 +2361,25 @@ export default function NaraConfigurationStudio() {
                             </div>
                           </div>
 
-                          {/* Section 3: Nodemailer SMTP Configuration */}
+                          {/* Section 3: Resend Email Configuration */}
                           <div className="space-y-4">
                             <div className="flex items-center gap-2">
                               <Mail className="text-[#5A5A40]" size={16} />
-                              <h3 className="text-xs font-serif font-semibold text-[#1C1C1C]">SMTP Email Notification Relay</h3>
+                              <h3 className="text-xs font-serif font-semibold text-[#1C1C1C]">Resend Email Notification Relay</h3>
                             </div>
                             <p className="text-[11px] text-[#605F5A] leading-relaxed">
-                              Routes the scheduling briefs, conference links, and platform telemetry directly to users' email mailboxes.
+                              Routes scheduling briefs, conference links, and platform notifications via Resend.
                             </p>
 
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                              <div className="space-y-1.5 md:col-span-2">
-                                <label className="text-xs font-mono text-[#605F5A] uppercase tracking-wider block">SMTP Server Host</label>
-                                <input
-                                  type="text"
-                                  value={settingsSmtpHost}
-                                  onChange={(e) => setSettingsSmtpHost(e.target.value)}
-                                  placeholder="smtp.gmail.com"
-                                  className="w-full bg-[#FAF9F5] border border-[#E3DFD5] rounded-lg px-4 py-2.5 text-xs focus:outline-none focus:border-[#5A5A40] transition-colors font-mono"
-                                />
-                              </div>
-
-                              <div className="space-y-1.5">
-                                <label className="text-xs font-mono text-[#605F5A] uppercase tracking-wider block">Port</label>
-                                <input
-                                  type="text"
-                                  value={settingsSmtpPort}
-                                  onChange={(e) => setSettingsSmtpPort(e.target.value)}
-                                  placeholder="587"
-                                  className="w-full bg-[#FAF9F5] border border-[#E3DFD5] rounded-lg px-4 py-2.5 text-xs focus:outline-none focus:border-[#5A5A40] transition-colors font-mono"
-                                />
-                              </div>
-                            </div>
-
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                              <div className="space-y-1.5">
-                                <label className="text-xs font-mono text-[#605F5A] uppercase tracking-wider block">SMTP Recipient Username (Gmail Address)</label>
-                                <input
-                                  type="email"
-                                  value={settingsSmtpUser}
-                                  onChange={(e) => setSettingsSmtpUser(e.target.value)}
-                                  placeholder="naraartficalintel@gmail.com"
-                                  className="w-full bg-[#FAF9F5] border border-[#E3DFD5] rounded-lg px-4 py-2.5 text-xs focus:outline-none focus:border-[#5A5A40] transition-colors font-mono"
-                                />
-                              </div>
-
-                              <div className="space-y-1.5">
-                                <label className="text-xs font-mono text-[#605F5A] uppercase tracking-wider block">SMTP App Password (Secret)</label>
-                                <input
-                                  type="password"
-                                  value={settingsSmtpPass}
-                                  onChange={(e) => setSettingsSmtpPass(e.target.value)}
-                                  placeholder="abcd efgh ijkl mnop"
-                                  className="w-full bg-[#FAF9F5] border border-[#E3DFD5] rounded-lg px-4 py-2.5 text-xs focus:outline-none focus:border-[#5A5A40] transition-colors font-mono"
-                                />
-                              </div>
+                            <div className="space-y-1.5">
+                              <label className="text-xs font-mono text-[#605F5A] uppercase tracking-wider block">Resend API Key (RESEND_API_KEY)</label>
+                              <input
+                                type="password"
+                                value={settingsResendApiKey}
+                                onChange={(e) => setSettingsResendApiKey(e.target.value)}
+                                placeholder="re_..."
+                                className="w-full bg-[#FAF9F5] border border-[#E3DFD5] rounded-lg px-4 py-2.5 text-xs focus:outline-none focus:border-[#5A5A40] transition-colors font-mono"
+                              />
                             </div>
                           </div>
 
